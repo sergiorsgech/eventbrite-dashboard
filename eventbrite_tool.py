@@ -313,7 +313,15 @@ def cmd_dashboard(args, token):
             row.update({"tickets_total": None, "orders_total": None, "canceled": None, "checked_in": None})
             rows.append(row)
 
-    generated_at = datetime.datetime.now().strftime("%Y-%m-%d %H:%M")
+    try:
+        # Show Pacific time (auto-adjusts for PST/PDT) with an explicit
+        # abbreviation, instead of the runner's naive local clock (which is
+        # UTC on GitHub Actions and reads as confusing/"wrong" to a
+        # Pacific-based team without a label).
+        from zoneinfo import ZoneInfo
+        generated_at = datetime.datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M %Z")
+    except Exception:
+        generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     html = build_dashboard_html(rows, org_name, generated_at, excluded)
 
     out_path = args.out or "eventbrite_dashboard.html"
