@@ -4,9 +4,9 @@ name: Update Eventbrite dashboard
   schedule:
     # Twice a day. Times are UTC and do NOT auto-adjust for daylight saving.
     # 15:00 UTC ≈ 8:00 AM Pacific (PDT, UTC-7)
-    # 20:00 UTC ≈ 1:00 PM Pacific (PDT, UTC-7)
+    # 03:00 UTC ≈ 8:00 PM Pacific (PDT, UTC-7, previous day)
     - cron: "0 15 * * *"
-    - cron: "0 20 * * *"
+    - cron: "0 3 * * *"
   workflow_dispatch: {}   # adds a manual "Run workflow" button in the Actions tab
 
 permissions:
@@ -35,3 +35,19 @@ jobs:
         with:
           commit_message: "Auto-update Eventbrite dashboard"
           file_pattern: "index.html .eventbrite_ticket_cache.json"
+
+      # IMPORTANT: commits made with the default GITHUB_TOKEN (like the one above)
+      # do NOT trigger other workflows, so the separate "Azure Static Web Apps
+      # CI/CD" workflow never fires after this job commits fresh data — the
+      # live site would silently stay stuck on whatever was last deployed.
+      # Deploying directly here, in the same run, avoids relying on that
+      # cross-workflow trigger entirely.
+      - name: Deploy to Azure Static Web Apps
+        uses: Azure/static-web-apps-deploy@v1
+        with:
+          azure_static_web_apps_api_token: ${{ secrets.AZURE_STATIC_WEB_APPS_API_TOKEN_YELLOW_OCEAN_06941A610 }}
+          repo_token: ${{ secrets.GITHUB_TOKEN }}
+          action: "upload"
+          app_location: "/"
+          api_location: ""
+          output_location: "."
