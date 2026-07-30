@@ -1,0 +1,445 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Eventbrite Dashboard — __ORG_NAME__</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body { margin: 0; padding: 0; }
+  body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background: #f9f9f7;
+  }
+  html[data-theme="dark"] body { background: #0d0d0d; }
+
+  .viz-root {
+    color-scheme: light;
+    --surface-1:      #eef6fc;  /* light blue tint */
+    --page-plane:     #f9f9f7;
+    --text-primary:   #0b0b0b;
+    --text-secondary: #52514e;
+    --text-muted:     #898781;
+    --gridline:       #dbe9f3;
+    --baseline:       #c3c2b7;
+    --border:         rgba(11,60,94,0.12);
+    --series-1:       #2a78d6;  /* live */
+    --series-completed: #898781;
+    --good:           #0ca30c;
+    --ocean:          #0b5f8a;  /* header band */
+    --ocean-ink:      #ffffff;
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 32px 24px 64px;
+  }
+  html[data-theme="dark"] .viz-root {
+    color-scheme: dark;
+    --surface-1:      #142430;  /* blue-tinted dark surface */
+    --page-plane:     #0d0d0d;
+    --text-primary:   #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted:     #898781;
+    --gridline:       #23394a;
+    --baseline:       #383835;
+    --border:         rgba(135,190,230,0.14);
+    --series-1:       #3987e5;
+    --series-completed: #6b6a64;
+    --good:           #0ca30c;
+    --ocean:          #0a3f5c;
+    --ocean-ink:      #ffffff;
+  }
+
+  .viz-root { color: var(--text-primary); }
+
+  header {
+    display: flex; justify-content: space-between; align-items: center;
+    margin-bottom: 24px; gap: 16px; flex-wrap: wrap;
+    background: var(--ocean);
+    border-radius: 16px;
+    padding: 20px 24px;
+  }
+  header .header-left { display: flex; align-items: center; gap: 16px; }
+  .logo-badge {
+    background: #ffffff;
+    border-radius: 12px;
+    padding: 10px 14px;
+    display: flex;
+    align-items: center;
+    flex: none;
+  }
+  .logo-badge img {
+    display: block;
+    height: 40px;
+    width: auto;
+    max-width: 140px;
+  }
+  @media (max-width: 560px) { .logo-badge img { height: 32px; } }
+  header .eyebrow {
+    font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+    color: rgba(255,255,255,0.75); margin: 0 0 4px;
+  }
+  header h1 { font-size: 24px; margin: 0 0 4px; color: var(--ocean-ink); }
+  header .sub { color: rgba(255,255,255,0.8); font-size: 14px; margin: 0; }
+  .theme-toggle {
+    border: 1px solid rgba(255,255,255,0.35);
+    background: rgba(255,255,255,0.12);
+    color: #ffffff;
+    border-radius: 8px;
+    padding: 8px 14px;
+    font-size: 13px;
+    cursor: pointer;
+  }
+  .theme-toggle:hover { background: rgba(255,255,255,0.22); }
+
+  .filters {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 20px;
+    flex-wrap: wrap;
+  }
+  .filters select, .filters input[type="search"] {
+    font-family: inherit;
+    font-size: 13px;
+    padding: 8px 10px;
+    border-radius: 8px;
+    border: 1px solid var(--border);
+    background: var(--surface-1);
+    color: var(--text-primary);
+  }
+  .filters input[type="search"] { min-width: 220px; }
+
+  .stats-section { margin-bottom: 24px; }
+  .stats-section .section-label {
+    font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em;
+    color: var(--text-muted); margin: 0 0 10px;
+  }
+  .stats {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
+    gap: 12px;
+  }
+  @media (max-width: 800px) { .stats { grid-template-columns: repeat(2, 1fr); } }
+  .stat-tile {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 16px;
+  }
+  .stat-tile .label { font-size: 12px; color: var(--text-secondary); margin-bottom: 6px; }
+  .stat-tile .value { font-size: 26px; font-weight: 600; font-variant-numeric: normal; }
+
+  .card {
+    background: var(--surface-1);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 24px;
+  }
+  .card h2 { font-size: 15px; margin: 0 0 16px; }
+
+  .table-caption { font-size: 12px; color: var(--text-secondary); margin: -8px 0 12px; }
+  .table-scroll {
+    overflow: auto;
+    max-height: 560px;
+    border: 1px solid var(--gridline);
+    border-radius: 8px;
+  }
+  table { width: 100%; border-collapse: collapse; font-size: 13px; min-width: 640px; }
+  thead th {
+    position: sticky;
+    top: 0;
+    background: var(--surface-1);
+    text-align: left;
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    color: var(--text-muted);
+    padding: 10px;
+    border-bottom: 1px solid var(--gridline);
+    cursor: pointer;
+    user-select: none;
+    white-space: nowrap;
+    z-index: 1;
+  }
+  thead th:hover { color: var(--text-primary); }
+  thead th.num, tbody td.num { text-align: right; }
+  tbody td { padding: 10px; border-bottom: 1px solid var(--gridline); vertical-align: top; }
+  tbody tr:last-child td { border-bottom: none; }
+  tbody tr:hover { background: color-mix(in srgb, var(--text-primary) 4%, transparent); }
+  .status-badge {
+    display: inline-flex; align-items: center; gap: 6px; font-size: 12px;
+    padding: 3px 9px 3px 7px; border-radius: 999px;
+    background: color-mix(in srgb, var(--text-primary) 6%, transparent);
+  }
+  .status-dot { width: 8px; height: 8px; border-radius: 50%; display: inline-block; flex: none; }
+  .status-dot.live { background: var(--series-1); }
+  .status-dot.completed { background: var(--series-completed); }
+  .row-link { color: var(--series-1); text-decoration: none; font-size: 12px; white-space: nowrap; }
+  .row-link:hover { text-decoration: underline; }
+  td.num { font-variant-numeric: tabular-nums; }
+
+  footer { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
+  .empty-state { color: var(--text-secondary); font-size: 13px; padding: 24px 0; text-align: center; }
+</style>
+</head>
+<body>
+<div class="viz-root" id="root">
+  <header>
+    <div class="header-left">
+      <div class="logo-badge" id="logoBadge">
+        <img src="__LOGO_DATA_URI__" alt="__ORG_NAME__ logo">
+      </div>
+      <div>
+        <p class="eyebrow">EC Hispanic Media</p>
+        <h1>Eventbrite EC Events</h1>
+        <p class="sub">Live &amp; completed events, 2025&ndash;2026 &middot; generated __GENERATED_AT__</p>
+      </div>
+    </div>
+    <button class="theme-toggle" id="themeToggle" type="button">Toggle dark mode</button>
+  </header>
+
+  <div class="filters">
+    <select id="yearFilter">
+      <option value="all">All years</option>
+      <option value="2025">2025</option>
+      <option value="2026">2026</option>
+    </select>
+    <select id="statusFilter">
+      <option value="all">All statuses</option>
+      <option value="live">Live</option>
+      <option value="completed">Completed</option>
+    </select>
+    <input type="search" id="searchInput" placeholder="Search event name&hellip;">
+  </div>
+
+  <div class="stats-section">
+    <p class="section-label">Events</p>
+    <div class="stats" id="stats"></div>
+  </div>
+  <div class="stats-section">
+    <p class="section-label">Tickets &amp; attendance</p>
+    <div class="stats" id="statsTickets"></div>
+  </div>
+
+  <div class="card">
+    <h2>Event list</h2>
+    <p class="table-caption" id="tableCaption"></p>
+    <div class="table-scroll">
+      <table id="eventsTable">
+        <thead>
+          <tr>
+            <th data-key="name">Name</th>
+            <th data-key="start">Date</th>
+            <th data-key="status">Status</th>
+            <th data-key="tickets_total" class="num">Tickets</th>
+            <th data-key="orders_total" class="num">Orders</th>
+            <th data-key="canceled" class="num">Canceled</th>
+            <th data-key="checked_in" class="num">Checked in</th>
+            <th>Link</th>
+          </tr>
+        </thead>
+        <tbody id="tbody"></tbody>
+      </table>
+    </div>
+    <div class="empty-state" id="emptyState" style="display:none;">No events match the current filters.</div>
+  </div>
+
+  <footer>
+    Data pulled from the Eventbrite API. __EXCLUDED_NOTE__ Refreshes automatically on
+    a schedule; to refresh manually, run <code>python3 eventbrite_tool.py dashboard</code>
+    and reopen this file.
+  </footer>
+</div>
+
+<script>
+  const EVENTS = __EVENTS_JSON__;
+
+  let sortKey = "start";
+  let sortDir = "desc";
+
+  function fmtDate(iso) {
+    const d = new Date(iso);
+    return d.toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  function currentFilters() {
+    return {
+      year: document.getElementById("yearFilter").value,
+      status: document.getElementById("statusFilter").value,
+      q: document.getElementById("searchInput").value.trim().toLowerCase(),
+    };
+  }
+
+  function applyFilters(events) {
+    const f = currentFilters();
+    return events.filter(e => {
+      if (f.year !== "all" && String(e.year) !== f.year) return false;
+      if (f.status !== "all" && e.status !== f.status) return false;
+      if (f.q && !e.name.toLowerCase().includes(f.q)) return false;
+      return true;
+    });
+  }
+
+  function fillTiles(containerId, tiles) {
+    const container = document.getElementById(containerId);
+    container.textContent = "";
+    tiles.forEach(([label, value]) => {
+      const tile = document.createElement("div");
+      tile.className = "stat-tile";
+      const l = document.createElement("div");
+      l.className = "label";
+      l.textContent = label;
+      const v = document.createElement("div");
+      v.className = "value";
+      v.textContent = value === null ? "—" : value.toLocaleString();
+      tile.appendChild(l);
+      tile.appendChild(v);
+      container.appendChild(tile);
+    });
+  }
+
+  function sumField(events, key) {
+    const vals = events.map(e => e[key]).filter(v => v !== null && v !== undefined);
+    if (!vals.length) return null;
+    return vals.reduce((a, b) => a + b, 0);
+  }
+
+  function renderStats(filtered) {
+    const total = filtered.length;
+    const live = filtered.filter(e => e.status === "live").length;
+    const completed = filtered.filter(e => e.status === "completed").length;
+    const y2025 = filtered.filter(e => e.year === 2025).length;
+    const y2026 = filtered.filter(e => e.year === 2026).length;
+    fillTiles("stats", [
+      ["Total events", total],
+      ["Live", live],
+      ["Completed", completed],
+      ["2025", y2025],
+      ["2026", y2026],
+    ]);
+    fillTiles("statsTickets", [
+      ["Tickets", sumField(filtered, "tickets_total")],
+      ["Unique orders", sumField(filtered, "orders_total")],
+      ["Canceled", sumField(filtered, "canceled")],
+      ["Checked in", sumField(filtered, "checked_in")],
+    ]);
+  }
+
+  const NUMERIC_KEYS = ["tickets_total", "orders_total", "canceled", "checked_in"];
+
+  function renderTable(filtered) {
+    const sorted = filtered.slice().sort((a, b) => {
+      let av = a[sortKey], bv = b[sortKey];
+      if (sortKey === "name") { av = av.toLowerCase(); bv = bv.toLowerCase(); }
+      if (NUMERIC_KEYS.includes(sortKey)) {
+        // nulls (no ticket data fetched) always sort last, regardless of direction
+        if (av === null && bv === null) return 0;
+        if (av === null) return 1;
+        if (bv === null) return -1;
+      }
+      if (av < bv) return sortDir === "asc" ? -1 : 1;
+      if (av > bv) return sortDir === "asc" ? 1 : -1;
+      return 0;
+    });
+    const tbody = document.getElementById("tbody");
+    tbody.textContent = "";
+    sorted.forEach(e => {
+      const tr = document.createElement("tr");
+
+      const tdName = document.createElement("td");
+      tdName.textContent = e.name;
+      tr.appendChild(tdName);
+
+      const tdDate = document.createElement("td");
+      tdDate.textContent = fmtDate(e.start);
+      tr.appendChild(tdDate);
+
+      const tdStatus = document.createElement("td");
+      const badge = document.createElement("span");
+      badge.className = "status-badge";
+      const dot = document.createElement("span");
+      dot.className = "status-dot " + e.status;
+      const txt = document.createElement("span");
+      txt.textContent = e.status === "live" ? "Live" : "Completed";
+      badge.appendChild(dot);
+      badge.appendChild(txt);
+      tdStatus.appendChild(badge);
+      tr.appendChild(tdStatus);
+
+      NUMERIC_KEYS.forEach(key => {
+        const td = document.createElement("td");
+        td.className = "num";
+        const v = e[key];
+        td.textContent = (v === null || v === undefined) ? "—" : v.toLocaleString();
+        tr.appendChild(td);
+      });
+
+      const tdLink = document.createElement("td");
+      const a = document.createElement("a");
+      a.className = "row-link";
+      a.href = e.url;
+      a.target = "_blank";
+      a.rel = "noopener noreferrer";
+      a.textContent = "View ↗";
+      tdLink.appendChild(a);
+      tr.appendChild(tdLink);
+
+      tbody.appendChild(tr);
+    });
+    document.getElementById("emptyState").style.display = sorted.length ? "none" : "block";
+
+    const caption = document.getElementById("tableCaption");
+    caption.textContent = sorted.length === EVENTS.length
+      ? `Showing all ${sorted.length.toLocaleString()} events`
+      : `Showing ${sorted.length.toLocaleString()} of ${EVENTS.length.toLocaleString()} events`;
+  }
+
+  function renderAll() {
+    const filtered = applyFilters(EVENTS);
+    renderStats(filtered);
+    renderTable(filtered);
+  }
+
+  document.getElementById("yearFilter").addEventListener("change", renderAll);
+  document.getElementById("statusFilter").addEventListener("change", renderAll);
+  document.getElementById("searchInput").addEventListener("input", renderAll);
+
+  document.querySelectorAll("#eventsTable thead th[data-key]").forEach(th => {
+    th.addEventListener("click", () => {
+      const key = th.getAttribute("data-key");
+      if (sortKey === key) {
+        sortDir = sortDir === "asc" ? "desc" : "asc";
+      } else {
+        sortKey = key;
+        sortDir = key === "name" ? "asc" : "desc";
+      }
+      renderAll();
+    });
+  });
+
+  document.getElementById("themeToggle").addEventListener("click", () => {
+    const html = document.documentElement;
+    // Bright/light is the default look. The toggle just flips to dark and back.
+    if (html.getAttribute("data-theme") === "dark") {
+      html.removeAttribute("data-theme");
+    } else {
+      html.setAttribute("data-theme", "dark");
+    }
+  });
+
+  const logoImg = document.querySelector(".logo-badge img");
+  if (logoImg) {
+    if (!logoImg.getAttribute("src")) {
+      document.getElementById("logoBadge").style.display = "none";
+    } else {
+      logoImg.addEventListener("error", () => {
+        document.getElementById("logoBadge").style.display = "none";
+      });
+    }
+  }
+
+  renderAll();
+</script>
+</body>
+</html>
