@@ -181,6 +181,68 @@
 
   footer { color: var(--text-muted); font-size: 12px; margin-top: 8px; }
   .empty-state { color: var(--text-secondary); font-size: 13px; padding: 24px 0; text-align: center; }
+
+  /* --- Ticket sales trend chart --- */
+  .trend-header {
+    display: flex; justify-content: space-between; align-items: flex-start;
+    gap: 16px; flex-wrap: wrap; margin-bottom: 14px;
+  }
+  .trend-header h2 { margin: 0 0 4px; }
+  #trendSubtitle { margin: 0; font-size: 12px; color: var(--text-secondary); }
+  .trend-controls { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+  #trendEventSearch {
+    font-family: inherit; font-size: 13px; padding: 8px 10px; min-width: 220px;
+    border-radius: 8px; border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-primary);
+  }
+  .trend-reset {
+    font-family: inherit; font-size: 12px; color: var(--series-1);
+    background: none; border: none; cursor: pointer; padding: 4px 2px;
+    text-decoration: none;
+  }
+  .trend-reset:hover { text-decoration: underline; }
+
+  .range-row { display: flex; gap: 6px; margin-bottom: 16px; flex-wrap: wrap; }
+  .range-btn {
+    font-family: inherit; font-size: 12px; font-weight: 600; cursor: pointer;
+    padding: 7px 12px; border-radius: 999px;
+    border: 1px solid var(--border);
+    background: var(--surface-1); color: var(--text-secondary);
+  }
+  .range-btn:hover { color: var(--text-primary); }
+  .range-btn[aria-pressed="true"] {
+    background: var(--series-1); border-color: var(--series-1); color: #ffffff;
+  }
+
+  .chart-wrap { position: relative; }
+  #trendChart { display: block; width: 100%; height: auto; overflow: visible; }
+  #trendChart .gridline { stroke: var(--gridline); stroke-width: 1; shape-rendering: crispEdges; }
+  #trendChart .axis-label { fill: var(--text-muted); font-size: 11px; }
+  #trendChart .trend-line { fill: none; stroke: var(--series-1); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
+  #trendChart .trend-area { fill: var(--series-1); opacity: 0.1; }
+  #trendChart .end-marker { fill: var(--series-1); stroke: var(--page-plane); stroke-width: 2; }
+  #trendChart .crosshair { stroke: var(--text-muted); stroke-width: 1; opacity: 0; pointer-events: none; }
+  #trendChart .hover-dot { fill: var(--series-1); stroke: var(--page-plane); stroke-width: 2; opacity: 0; pointer-events: none; }
+  #trendChart .hover-catcher { fill: transparent; }
+
+  .chart-tooltip {
+    position: absolute; pointer-events: none; display: none;
+    background: var(--page-plane); border: 1px solid var(--border); border-radius: 8px;
+    padding: 8px 10px; font-size: 12px; box-shadow: 0 4px 14px rgba(0,0,0,0.14);
+    white-space: nowrap; z-index: 2; transform: translate(-50%, -100%);
+  }
+  .chart-tooltip .tt-value { font-size: 15px; font-weight: 600; color: var(--text-primary); }
+  .chart-tooltip .tt-date { color: var(--text-secondary); margin-top: 2px; }
+
+  .table-toggle {
+    font-family: inherit; font-size: 12px; color: var(--series-1);
+    background: none; border: none; cursor: pointer; padding: 10px 0 0;
+  }
+  .table-toggle:hover { text-decoration: underline; }
+  #trendTableWrap { margin-top: 10px; max-height: 280px; }
+
+  tbody tr.row-selected { background: color-mix(in srgb, var(--series-1) 10%, transparent); }
+  tbody tr[data-event-id] { cursor: pointer; }
 </style>
 </head>
 <body>
@@ -193,7 +255,7 @@
       <div>
         <p class="eyebrow">El Clasificado</p>
         <h1>Eventbrite EC Events</h1>
-        <p class="sub">Live &amp; completed events, 2025&ndash;2026 &middot; generated __GENERATED_AT__</p>
+        <p class="sub">Live &amp; completed events, 2024&ndash;present &middot; generated __GENERATED_AT__</p>
       </div>
     </div>
     <button class="theme-toggle" id="themeToggle" type="button">Toggle dark mode</button>
@@ -202,8 +264,6 @@
   <div class="filters">
     <select id="yearFilter">
       <option value="all">All years</option>
-      <option value="2025">2025</option>
-      <option value="2026">2026</option>
     </select>
     <select id="statusFilter">
       <option value="all">All statuses</option>
@@ -220,6 +280,38 @@
   <div class="stats-section">
     <p class="section-label">Tickets &amp; attendance</p>
     <div class="stats" id="statsTickets"></div>
+  </div>
+
+  <div class="card" id="trendCard">
+    <div class="trend-header">
+      <div>
+        <h2 id="trendTitle">Tickets sold per day — General (all events)</h2>
+        <p id="trendSubtitle"></p>
+      </div>
+      <div class="trend-controls">
+        <input type="search" id="trendEventSearch" placeholder="Search an event to drill in&hellip;" list="trendEventDatalist" autocomplete="off">
+        <datalist id="trendEventDatalist"></datalist>
+        <button type="button" class="trend-reset" id="trendReset" style="display:none;">&larr; Back to General</button>
+      </div>
+    </div>
+    <div class="range-row" id="rangeRow" role="group" aria-label="Time range">
+      <button type="button" class="range-btn" data-range="30" aria-pressed="true">Last 30 Days</button>
+      <button type="button" class="range-btn" data-range="60" aria-pressed="false">Last 60 Days</button>
+      <button type="button" class="range-btn" data-range="90" aria-pressed="false">Last 90 Days</button>
+      <button type="button" class="range-btn" data-range="weekly" aria-pressed="false">All Time (Weekly)</button>
+    </div>
+    <div class="chart-wrap" id="chartWrap">
+      <svg id="trendChart" viewBox="0 0 800 260" role="img" aria-label="Tickets sold over time"></svg>
+      <div class="chart-tooltip" id="chartTooltip"></div>
+    </div>
+    <div class="empty-state" id="trendEmptyState" style="display:none;">No ticket sales data for this range yet.</div>
+    <button type="button" class="table-toggle" id="trendTableToggle" aria-expanded="false">View as table</button>
+    <div class="table-scroll" id="trendTableWrap" style="display:none;">
+      <table id="trendTable">
+        <thead><tr><th>Date</th><th class="num">Tickets sold</th></tr></thead>
+        <tbody id="trendTbody"></tbody>
+      </table>
+    </div>
   </div>
 
   <div class="card">
@@ -254,9 +346,13 @@
 
 <script>
   const EVENTS = __EVENTS_JSON__;
+  const GENERAL_DAILY = __GENERAL_DAILY_JSON__;
+  const ALL_YEARS = Array.from(new Set(EVENTS.map(e => e.year))).sort((a, b) => a - b);
 
   let sortKey = "start";
   let sortDir = "desc";
+  let selectedEventId = null;   // null = "General" (all events combined)
+  let selectedRange = "30";     // "30" | "60" | "90" | "weekly"
 
   function fmtDate(iso) {
     const d = new Date(iso);
@@ -309,14 +405,12 @@
     const total = filtered.length;
     const live = filtered.filter(e => e.status === "live").length;
     const completed = filtered.filter(e => e.status === "completed").length;
-    const y2025 = filtered.filter(e => e.year === 2025).length;
-    const y2026 = filtered.filter(e => e.year === 2026).length;
+    const yearTiles = ALL_YEARS.map(y => [String(y), filtered.filter(e => e.year === y).length]);
     fillTiles("stats", [
       ["Total events", total],
       ["Live", live],
       ["Completed", completed],
-      ["2025", y2025],
-      ["2026", y2026],
+      ...yearTiles,
     ]);
     fillTiles("statsTickets", [
       ["Tickets", sumField(filtered, "tickets_total")],
@@ -346,6 +440,9 @@
     tbody.textContent = "";
     sorted.forEach(e => {
       const tr = document.createElement("tr");
+      tr.setAttribute("data-event-id", e.id);
+      if (e.id === selectedEventId) tr.classList.add("row-selected");
+      tr.addEventListener("click", () => selectEvent(e.id));
 
       const tdName = document.createElement("td");
       tdName.textContent = e.name;
@@ -382,6 +479,7 @@
       a.target = "_blank";
       a.rel = "noopener noreferrer";
       a.textContent = "View ↗";
+      a.addEventListener("click", ev => ev.stopPropagation());
       tdLink.appendChild(a);
       tr.appendChild(tdLink);
 
@@ -439,6 +537,313 @@
     }
   }
 
+  // ---------------------------------------------------------------------
+  // Ticket sales trend chart — daily/weekly tickets purchased, General
+  // (all events combined) or drilled into a single event.
+  // ---------------------------------------------------------------------
+
+  const EVENTS_BY_ID = new Map(EVENTS.map(e => [e.id, e]));
+
+  function ymdToDate(s) {
+    const [y, m, d] = s.split("-").map(Number);
+    return new Date(Date.UTC(y, m - 1, d));
+  }
+  function dateToYmd(d) { return d.toISOString().slice(0, 10); }
+  function addDaysUTC(d, n) {
+    const r = new Date(d);
+    r.setUTCDate(r.getUTCDate() + n);
+    return r;
+  }
+  function fmtShortDate(ymd) {
+    return ymdToDate(ymd).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+  }
+  function fmtFullDate(ymd) {
+    return ymdToDate(ymd).toLocaleDateString(undefined, { year: "numeric", month: "short", day: "numeric" });
+  }
+
+  // Rounds a rough axis max up to a clean 1/2/5 * 10^n step, so y-axis
+  // ticks read as clean numbers rather than arbitrary fractions.
+  function niceStep(roughMax, targetTicks) {
+    if (roughMax <= 0) return 1;
+    const roughStep = roughMax / targetTicks;
+    const mag = Math.pow(10, Math.floor(Math.log10(roughStep)));
+    const norm = roughStep / mag;
+    let step;
+    if (norm < 1.5) step = 1;
+    else if (norm < 3.5) step = 2;
+    else if (norm < 7.5) step = 5;
+    else step = 10;
+    return step * mag;
+  }
+
+  function dailyMapFor(eventId) {
+    if (!eventId) return GENERAL_DAILY;
+    const ev = EVENTS_BY_ID.get(eventId);
+    return (ev && ev.daily) ? ev.daily : {};
+  }
+
+  // Anchors the range to the series' own most recent sale date (not
+  // "today") so a long-completed event's "Last 30 Days" shows the tail of
+  // its actual sales curve instead of 30 empty days.
+  function buildDailySeries(dailyMap, days) {
+    const keys = Object.keys(dailyMap);
+    const todayYmd = dateToYmd(new Date());
+    const anchorYmd = keys.length
+      ? (keys.reduce((a, b) => (a > b ? a : b)) > todayYmd ? todayYmd : keys.reduce((a, b) => (a > b ? a : b)))
+      : todayYmd;
+    const end = ymdToDate(anchorYmd);
+    const start = addDaysUTC(end, -(days - 1));
+    const out = [];
+    for (let d = start; d <= end; d = addDaysUTC(d, 1)) {
+      const key = dateToYmd(d);
+      out.push({ date: key, value: dailyMap[key] || 0 });
+    }
+    return out;
+  }
+
+  function buildWeeklySeries(dailyMap) {
+    const keys = Object.keys(dailyMap).sort();
+    if (!keys.length) return [];
+    const first = ymdToDate(keys[0]);
+    const last = ymdToDate(keys[keys.length - 1]);
+    const dow = (first.getUTCDay() + 6) % 7; // 0 = Monday
+    let weekStart = addDaysUTC(first, -dow);
+    const out = [];
+    while (weekStart <= last) {
+      let sum = 0;
+      for (let d = weekStart, i = 0; i < 7; d = addDaysUTC(d, 1), i++) {
+        sum += dailyMap[dateToYmd(d)] || 0;
+      }
+      out.push({ date: dateToYmd(weekStart), value: sum });
+      weekStart = addDaysUTC(weekStart, 7);
+    }
+    return out;
+  }
+
+  function currentSeries() {
+    const dailyMap = dailyMapFor(selectedEventId);
+    if (selectedRange === "weekly") return buildWeeklySeries(dailyMap);
+    return buildDailySeries(dailyMap, Number(selectedRange));
+  }
+
+  const SVG_NS = "http://www.w3.org/2000/svg";
+  function svgEl(tag, attrs) {
+    const el = document.createElementNS(SVG_NS, tag);
+    if (attrs) Object.keys(attrs).forEach(k => el.setAttribute(k, attrs[k]));
+    return el;
+  }
+
+  const CHART_W = 800, CHART_H = 260;
+  const PAD = { top: 16, right: 16, bottom: 30, left: 44 };
+
+  function renderTrendTable(series) {
+    const tbody = document.getElementById("trendTbody");
+    tbody.textContent = "";
+    series.slice().reverse().forEach(p => {
+      const tr = document.createElement("tr");
+      const tdDate = document.createElement("td");
+      tdDate.textContent = selectedRange === "weekly" ? ("Week of " + fmtFullDate(p.date)) : fmtFullDate(p.date);
+      const tdVal = document.createElement("td");
+      tdVal.className = "num";
+      tdVal.textContent = p.value.toLocaleString();
+      tr.appendChild(tdDate);
+      tr.appendChild(tdVal);
+      tbody.appendChild(tr);
+    });
+  }
+
+  function renderChart() {
+    const series = currentSeries();
+    const svg = document.getElementById("trendChart");
+    svg.textContent = "";
+
+    const hasAnyData = series.some(p => p.value > 0);
+    document.getElementById("trendEmptyState").style.display = hasAnyData ? "none" : "block";
+    document.getElementById("chartWrap").style.display = hasAnyData ? "" : "none";
+
+    renderTrendTable(series);
+    if (!hasAnyData || series.length < 2) return;
+
+    const plotW = CHART_W - PAD.left - PAD.right;
+    const plotH = CHART_H - PAD.top - PAD.bottom;
+    const maxVal = Math.max(...series.map(p => p.value));
+    const step = niceStep(maxVal, 4);
+    const yMax = Math.max(step, Math.ceil(maxVal / step) * step);
+
+    const xPos = i => PAD.left + (i / (series.length - 1)) * plotW;
+    const yPos = v => PAD.top + plotH - (v / yMax) * plotH;
+
+    const tickCount = Math.round(yMax / step);
+    for (let t = 0; t <= tickCount; t++) {
+      const v = t * step;
+      const gy = yPos(v);
+      svg.appendChild(svgEl("line", { class: "gridline", x1: PAD.left, x2: CHART_W - PAD.right, y1: gy, y2: gy }));
+      const label = svgEl("text", { class: "axis-label", x: PAD.left - 8, y: gy + 4, "text-anchor": "end" });
+      label.textContent = v.toLocaleString();
+      svg.appendChild(label);
+    }
+
+    const maxLabels = 6;
+    const labelEvery = Math.max(1, Math.ceil(series.length / maxLabels));
+    series.forEach((p, i) => {
+      if (i % labelEvery !== 0 && i !== series.length - 1) return;
+      const label = svgEl("text", { class: "axis-label", x: xPos(i), y: CHART_H - PAD.bottom + 18, "text-anchor": "middle" });
+      label.textContent = fmtShortDate(p.date);
+      svg.appendChild(label);
+    });
+
+    let areaPath = `M ${xPos(0)} ${yPos(0)} `;
+    series.forEach((p, i) => { areaPath += `L ${xPos(i)} ${yPos(p.value)} `; });
+    areaPath += `L ${xPos(series.length - 1)} ${yPos(0)} Z`;
+    svg.appendChild(svgEl("path", { class: "trend-area", d: areaPath }));
+
+    let linePath = "";
+    series.forEach((p, i) => { linePath += (i === 0 ? "M " : "L ") + xPos(i) + " " + yPos(p.value) + " "; });
+    svg.appendChild(svgEl("path", { class: "trend-line", d: linePath }));
+
+    const lastIdx = series.length - 1;
+    svg.appendChild(svgEl("circle", { class: "end-marker", cx: xPos(lastIdx), cy: yPos(series[lastIdx].value), r: 4 }));
+
+    const crosshair = svgEl("line", { class: "crosshair", x1: 0, x2: 0, y1: PAD.top, y2: CHART_H - PAD.bottom });
+    const hoverDot = svgEl("circle", { class: "hover-dot", r: 5 });
+    svg.appendChild(crosshair);
+    svg.appendChild(hoverDot);
+
+    const catcher = svgEl("rect", { class: "hover-catcher", x: PAD.left, y: PAD.top, width: plotW, height: plotH, tabindex: "0" });
+    svg.appendChild(catcher);
+
+    const tooltip = document.getElementById("chartTooltip");
+
+    function pointerToIndex(evt) {
+      const rect = svg.getBoundingClientRect();
+      const scaleX = CHART_W / rect.width;
+      const localX = (evt.clientX - rect.left) * scaleX;
+      const frac = (localX - PAD.left) / plotW;
+      return Math.max(0, Math.min(series.length - 1, Math.round(frac * (series.length - 1))));
+    }
+
+    function showAt(idx) {
+      const p = series[idx];
+      const px = xPos(idx), py = yPos(p.value);
+      crosshair.setAttribute("x1", px);
+      crosshair.setAttribute("x2", px);
+      crosshair.style.opacity = 1;
+      hoverDot.setAttribute("cx", px);
+      hoverDot.setAttribute("cy", py);
+      hoverDot.style.opacity = 1;
+
+      const rect = svg.getBoundingClientRect();
+      const scale = rect.width / CHART_W;
+      tooltip.style.display = "block";
+      tooltip.style.left = (px * scale) + "px";
+      tooltip.style.top = (py * scale - 10) + "px";
+      tooltip.textContent = "";
+      const val = document.createElement("div");
+      val.className = "tt-value";
+      val.textContent = p.value.toLocaleString() + (p.value === 1 ? " ticket" : " tickets");
+      const date = document.createElement("div");
+      date.className = "tt-date";
+      date.textContent = selectedRange === "weekly" ? ("Week of " + fmtFullDate(p.date)) : fmtFullDate(p.date);
+      tooltip.appendChild(val);
+      tooltip.appendChild(date);
+    }
+
+    function hide() {
+      crosshair.style.opacity = 0;
+      hoverDot.style.opacity = 0;
+      tooltip.style.display = "none";
+    }
+
+    catcher.addEventListener("pointermove", evt => showAt(pointerToIndex(evt)));
+    catcher.addEventListener("pointerleave", hide);
+    let focusedIdx = lastIdx;
+    catcher.addEventListener("focus", () => showAt(focusedIdx));
+    catcher.addEventListener("blur", hide);
+    catcher.addEventListener("keydown", evt => {
+      if (evt.key === "ArrowLeft") { focusedIdx = Math.max(0, focusedIdx - 1); showAt(focusedIdx); evt.preventDefault(); }
+      if (evt.key === "ArrowRight") { focusedIdx = Math.min(lastIdx, focusedIdx + 1); showAt(focusedIdx); evt.preventDefault(); }
+    });
+  }
+
+  function updateTrendHeader() {
+    const title = document.getElementById("trendTitle");
+    const subtitle = document.getElementById("trendSubtitle");
+    const resetBtn = document.getElementById("trendReset");
+    if (selectedEventId) {
+      const ev = EVENTS_BY_ID.get(selectedEventId);
+      title.textContent = "Tickets sold per day — " + (ev ? ev.name : "Unknown event");
+      resetBtn.style.display = "";
+    } else {
+      title.textContent = "Tickets sold per day — General (all events)";
+      resetBtn.style.display = "none";
+    }
+    const rangeLabel = selectedRange === "weekly" ? "all time, bucketed weekly" : `the last ${selectedRange} days`;
+    subtitle.textContent = "Counted on the day a ticket was purchased, showing " + rangeLabel + ".";
+  }
+
+  function selectEvent(eventId) {
+    selectedEventId = eventId;
+    const ev = eventId ? EVENTS_BY_ID.get(eventId) : null;
+    document.getElementById("trendEventSearch").value = ev ? ev.name : "";
+    updateTrendHeader();
+    renderChart();
+    renderTable(applyFilters(EVENTS)); // refresh row highlight
+    document.getElementById("trendCard").scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
+  const eventDatalist = document.getElementById("trendEventDatalist");
+  EVENTS.slice().sort((a, b) => a.name.localeCompare(b.name)).forEach(e => {
+    const opt = document.createElement("option");
+    opt.value = e.name;
+    eventDatalist.appendChild(opt);
+  });
+  const EVENT_ID_BY_NAME = new Map();
+  EVENTS.forEach(e => {
+    // If two events share a name (e.g. an annual event), the most recent wins.
+    const existingId = EVENT_ID_BY_NAME.get(e.name.toLowerCase());
+    if (!existingId || e.start > EVENTS_BY_ID.get(existingId).start) {
+      EVENT_ID_BY_NAME.set(e.name.toLowerCase(), e.id);
+    }
+  });
+  document.getElementById("trendEventSearch").addEventListener("change", evt => {
+    const typed = evt.target.value.trim().toLowerCase();
+    if (!typed) { selectEvent(null); return; }
+    const id = EVENT_ID_BY_NAME.get(typed);
+    if (id) selectEvent(id);
+  });
+  document.getElementById("trendReset").addEventListener("click", () => selectEvent(null));
+
+  document.querySelectorAll(".range-btn").forEach(btn => {
+    btn.addEventListener("click", () => {
+      selectedRange = btn.getAttribute("data-range");
+      document.querySelectorAll(".range-btn").forEach(b =>
+        b.setAttribute("aria-pressed", b === btn ? "true" : "false"));
+      updateTrendHeader();
+      renderChart();
+    });
+  });
+
+  document.getElementById("trendTableToggle").addEventListener("click", () => {
+    const wrap = document.getElementById("trendTableWrap");
+    const btn = document.getElementById("trendTableToggle");
+    const showing = wrap.style.display !== "none";
+    wrap.style.display = showing ? "none" : "block";
+    btn.textContent = showing ? "View as table" : "Hide table";
+    btn.setAttribute("aria-expanded", showing ? "false" : "true");
+  });
+
+  // Populate the year filter from whatever years are actually present, so
+  // adding a new year of events never again requires a template edit.
+  const yearFilterEl = document.getElementById("yearFilter");
+  ALL_YEARS.forEach(y => {
+    const opt = document.createElement("option");
+    opt.value = String(y);
+    opt.textContent = String(y);
+    yearFilterEl.appendChild(opt);
+  });
+
+  updateTrendHeader();
+  renderChart();
   renderAll();
 </script>
 </body>
