@@ -161,15 +161,58 @@ def cmd_orders(args, token):
 # Dashboard
 # ---------------------------------------------------------------------------
 
+_PACIFIC_TZ = None
+_PACIFIC_TZ_LOADED = False
+
+
+def _pacific_tz():
+    """Lazily load the Pacific zoneinfo, once. Returns None if unavailable."""
+    global _PACIFIC_TZ, _PACIFIC_TZ_LOADED
+    if not _PACIFIC_TZ_LOADED:
+        _PACIFIC_TZ_LOADED = True
+        try:
+            from zoneinfo import ZoneInfo
+            _PACIFIC_TZ = ZoneInfo("America/Los_Angeles")
+        except Exception:
+            _PACIFIC_TZ = None
+    return _PACIFIC_TZ
+
+
+def ticket_purchase_date(created_iso):
+    """Convert an attendee's `created` timestamp (UTC, e.g. "2026-07-15T18:32:00Z")
+    to a Pacific calendar date string ("2026-07-15"), for bucketing ticket sales
+    by the day they were actually purchased in the org's own timezone.
+
+    Falls back to the raw UTC calendar date if the timestamp can't be parsed
+    or zoneinfo/tzdata isn't available, rather than dropping the ticket.
+    """
+    if not created_iso:
+        return None
+    try:
+        dt = datetime.datetime.strptime(created_iso, "%Y-%m-%dT%H:%M:%SZ")
+        dt = dt.replace(tzinfo=datetime.timezone.utc)
+        tz = _pacific_tz()
+        if tz:
+            dt = dt.astimezone(tz)
+        return dt.strftime("%Y-%m-%d")
+    except (ValueError, TypeError):
+        return created_iso[:10] if len(created_iso) >= 10 else None
+
+
 def get_event_ticket_stats(event_id, token):
     """Aggregate ticket/order/cancellation/check-in stats from an event's attendees.
 
     Returns a dict with tickets_total (gross attendee records), orders_total
-    (unique order IDs), canceled (cancelled or refunded tickets), and
-    checked_in (tickets scanned in). Returns zeros (and an error string) if
-    the attendees endpoint can't be read for this event.
+    (unique order IDs), canceled (cancelled or refunded tickets), checked_in
+    (tickets scanned in), and daily (a sparse {date: tickets_purchased_that_day}
+    map used to chart sales trends). A ticket counts toward the day it was
+    purchased even if later canceled/refunded, since the trend chart is about
+    when a campaign or push drove purchases, not the eventual refund date.
+    Returns zeros (and an error string) if the attendees endpoint can't be
+    read for this event.
     """
-    stats = {"tickets_total": 0, "orders_total": 0, "canceled": 0, "checked_in": 0, "error": None}
+    stats = {"tickets_total": 0, "orders_total": 0, "canceled": 0, "checked_in": 0,
+              "daily": {}, "error": None}
     try:
         attendees = paginate(f"/events/{event_id}/attendees/", token, item_key="attendees", soft=True)
     except ApiError as e:
@@ -177,6 +220,7 @@ def get_event_ticket_stats(event_id, token):
         return stats
 
     order_ids = set()
+    daily = {}
     for a in attendees:
         stats["tickets_total"] += 1
         order_id = a.get("order_id")
@@ -186,7 +230,11 @@ def get_event_ticket_stats(event_id, token):
             stats["canceled"] += 1
         if a.get("checked_in"):
             stats["checked_in"] += 1
+        day = ticket_purchase_date(a.get("created"))
+        if day:
+            daily[day] = daily.get(day, 0) + 1
     stats["orders_total"] = len(order_ids)
+    stats["daily"] = daily
     return stats
 
 
@@ -234,7 +282,7 @@ def cmd_dashboard(args, token):
         if not start_local:
             continue
         year = int(start_local[0:4])
-        if year not in (2025, 2026):
+        if year < 2024:
             continue
         if status not in ("live", "completed"):
             excluded += 1
@@ -262,7 +310,12 @@ def cmd_dashboard(args, token):
         to_fetch = []
         for row in candidates:
             cached = cache.get(row["id"])
-            if row["status"] == "completed" and cached and not args.refresh_cache:
+            # "daily" in cached: guards against a cache written before the
+            # daily-sales-breakdown feature existed. Those older entries get
+            # re-fetched once to backfill it, then are cached (with "daily")
+            # like everything else from then on.
+            if (row["status"] == "completed" and cached and not args.refresh_cache
+                    and "daily" in cached):
                 row.update(cached)
                 rows.append(row)
             else:
@@ -310,8 +363,17 @@ def cmd_dashboard(args, token):
         rows.sort(key=lambda r: r["start"], reverse=True)
     else:
         for row in candidates:
-            row.update({"tickets_total": None, "orders_total": None, "canceled": None, "checked_in": None})
+            row.update({"tickets_total": None, "orders_total": None, "canceled": None,
+                        "checked_in": None, "daily": {}})
             rows.append(row)
+
+    # Org-wide "General" daily sales trend: sum every event's own daily
+    # breakdown by date. Computed here (not fetched separately) since it's
+    # free once each event's per-ticket purchase dates are already in hand.
+    general_daily = {}
+    for row in rows:
+        for day, count in (row.get("daily") or {}).items():
+            general_daily[day] = general_daily.get(day, 0) + count
 
     try:
         # Show Pacific time (auto-adjusts for PST/PDT) with an explicit
@@ -322,7 +384,7 @@ def cmd_dashboard(args, token):
         generated_at = datetime.datetime.now(ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M %Z")
     except Exception:
         generated_at = datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
-    html = build_dashboard_html(rows, org_name, generated_at, excluded)
+    html = build_dashboard_html(rows, org_name, generated_at, excluded, general_daily)
 
     out_path = args.out or "eventbrite_dashboard.html"
     with open(out_path, "w", encoding="utf-8") as f:
@@ -377,16 +439,17 @@ def load_logo_data_uri():
         return ""
 
 
-def build_dashboard_html(rows, org_name, generated_at, excluded_count):
+def build_dashboard_html(rows, org_name, generated_at, excluded_count, general_daily):
     excluded_note = ""
     if excluded_count:
-        excluded_note = f"({excluded_count} draft/canceled/other-status events from 2025-2026 were excluded.)"
+        excluded_note = f"({excluded_count} draft/canceled/other-status events were excluded.)"
     html = load_template()
     html = html.replace("__ORG_NAME__", org_name.replace("<", "&lt;").replace(">", "&gt;"))
     html = html.replace("__GENERATED_AT__", generated_at)
     html = html.replace("__EXCLUDED_NOTE__", excluded_note)
     html = html.replace("__LOGO_DATA_URI__", load_logo_data_uri())
     html = html.replace("__EVENTS_JSON__", json.dumps(rows))
+    html = html.replace("__GENERAL_DAILY_JSON__", json.dumps(general_daily))
     return html
 
 
@@ -406,7 +469,7 @@ def main():
     p_orders = sub.add_parser("orders", help="List orders for an event")
     p_orders.add_argument("--event", required=True, help="Event ID")
 
-    p_dashboard = sub.add_parser("dashboard", help="Build a local HTML dashboard of 2025-2026 live/completed events")
+    p_dashboard = sub.add_parser("dashboard", help="Build a local HTML dashboard of 2024+ live/completed events")
     p_dashboard.add_argument("--org", help="Organization ID (defaults to first org)")
     p_dashboard.add_argument("--out", help="Output HTML file path (default: eventbrite_dashboard.html)")
     p_dashboard.add_argument("--no-tickets", dest="tickets", action="store_false",
