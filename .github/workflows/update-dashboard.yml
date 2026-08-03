@@ -2,13 +2,15 @@ name: Update Eventbrite dashboard
 
 "on":
   schedule:
-    # Twice a day. Times are UTC and do NOT auto-adjust for daylight saving,
-    # so these will drift by an hour for a few weeks around the March/
-    # November clock changes.
+    # Three times a day. Times are UTC and do NOT auto-adjust for daylight
+    # saving, so these will drift by an hour for a few weeks around the
+    # March/November clock changes.
     # 15:00 UTC ≈ 8:00 AM Pacific (PDT, UTC-7)
     # 22:00 UTC ≈ 3:00 PM Pacific (PDT, UTC-7)
+    # 02:00 UTC ≈ 7:00 PM Pacific (PDT, UTC-7, previous day)
     - cron: "0 15 * * *"
     - cron: "0 22 * * *"
+    - cron: "0 2 * * *"
   workflow_dispatch: {}   # adds a manual "Run workflow" button in the Actions tab
 
 permissions:
