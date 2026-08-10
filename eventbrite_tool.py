@@ -284,6 +284,13 @@ def cmd_dashboard(args, token):
         year = int(start_local[0:4])
         if year < 2024:
             continue
+        # Eventbrite moves an event through live -> started -> ended -> completed
+        # as its date passes, and "completed" can lag the actual event by a day
+        # or more. Treat started/ended as live so the event isn't invisible in
+        # that window -- it flips to "completed" (and starts being cached) once
+        # Eventbrite finalizes it.
+        if status in ("started", "ended"):
+            status = "live"
         if status not in ("live", "completed"):
             excluded += 1
             continue
